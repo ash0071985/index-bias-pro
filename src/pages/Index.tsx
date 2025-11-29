@@ -4,39 +4,76 @@ import { IndexSelector } from '@/components/IndexSelector';
 import { DashboardSummary } from '@/components/DashboardSummary';
 import { SupportResistanceTable } from '@/components/SupportResistanceTable';
 import { PremiumTable } from '@/components/PremiumTable';
+import { InsightsPanel } from '@/components/InsightsPanel';
+import { DataSummaryCard } from '@/components/DataSummaryCard';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { BhavCopyRow, IndexName, IndexAnalysis } from '@/types/options';
 import { analyzeIndex } from '@/lib/optionsAnalysis';
+import { getDetectedIndices, getExpiryDate } from '@/lib/validation';
 import { BarChart3 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Index = () => {
   const [rawData, setRawData] = useState<BhavCopyRow[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<IndexName>('BANKNIFTY');
   const [spotClose, setSpotClose] = useState<number>(46218);
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [detectedIndices, setDetectedIndices] = useState<string[]>([]);
 
   const handleDataLoaded = (data: BhavCopyRow[]) => {
     setRawData(data);
+    const indices = getDetectedIndices(data);
+    setDetectedIndices(indices);
+    
+    // Auto-select first detected index
+    if (indices.length > 0 && indices.includes(selectedIndex) === false) {
+      setSelectedIndex(indices[0] as IndexName);
+    }
   };
 
   const handleAnalyze = () => {
-    if (rawData.length === 0 || !spotClose) return;
-
-    // Filter data for selected index
-    const indexData = rawData.filter(row => 
-      row.SYMBOL === selectedIndex && 
-      row.INSTRUMENT === 'OPTIDX' &&
-      (row.OPTION_TYP === 'CE' || row.OPTION_TYP === 'PE')
-    );
-
-    if (indexData.length === 0) {
+    if (rawData.length === 0 || !spotClose) {
+      toast.error('Please upload data and enter spot price');
       return;
     }
 
-    // Get expiry from first row
-    const expiry = indexData[0]?.EXPIRY_DT || '';
+    if (!spotClose || spotClose <= 0) {
+      toast.error('Please enter a valid spot close price');
+      return;
+    }
 
-    const result = analyzeIndex(selectedIndex, indexData, spotClose, expiry);
-    setAnalysis(result);
+    setIsAnalyzing(true);
+
+    // Simulate processing delay for better UX
+    setTimeout(() => {
+      try {
+        // Filter data for selected index
+        const indexData = rawData.filter(row => 
+          row.SYMBOL === selectedIndex && 
+          row.INSTRUMENT === 'OPTIDX' &&
+          (row.OPTION_TYP === 'CE' || row.OPTION_TYP === 'PE')
+        );
+
+        if (indexData.length === 0) {
+          toast.error(`No option chain data found for ${selectedIndex}`);
+          setIsAnalyzing(false);
+          return;
+        }
+
+        // Get expiry from data
+        const expiry = getExpiryDate(rawData, selectedIndex);
+
+        const result = analyzeIndex(selectedIndex, indexData, spotClose, expiry);
+        setAnalysis(result);
+        toast.success('Analysis completed successfully');
+      } catch (error) {
+        toast.error('Error analyzing data');
+        console.error(error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 800);
   };
 
   return (
@@ -67,32 +104,55 @@ const Index = () => {
 
           {/* Configuration Section */}
           {rawData.length > 0 && (
+            <>
+              <section>
+                <h2 className="text-lg font-semibold mb-4 text-foreground">Step 2: Data Overview</h2>
+                <DataSummaryCard
+                  totalRows={rawData.length}
+                  detectedIndices={detectedIndices}
+                  expiry={getExpiryDate(rawData, selectedIndex)}
+                />
+              </section>
+
+              <section>
+                <h2 className="text-lg font-semibold mb-4 text-foreground">Step 3: Configure Analysis</h2>
+                <IndexSelector
+                  selectedIndex={selectedIndex}
+                  onIndexChange={setSelectedIndex}
+                  spotClose={spotClose}
+                  onSpotCloseChange={setSpotClose}
+                />
+                <div className="mt-4">
+                  <button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAnalyzing ? 'Analyzing...' : 'Analyze Options Data'}
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* Loading State */}
+          {isAnalyzing && (
             <section>
-              <h2 className="text-lg font-semibold mb-4 text-foreground">Step 2: Configure Analysis</h2>
-              <IndexSelector
-                selectedIndex={selectedIndex}
-                onIndexChange={setSelectedIndex}
-                spotClose={spotClose}
-                onSpotCloseChange={setSpotClose}
-              />
-              <div className="mt-4">
-                <button
-                  onClick={handleAnalyze}
-                  className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-                >
-                  Analyze Options Data
-                </button>
-              </div>
+              <LoadingSpinner message="Analyzing option chain data..." />
             </section>
           )}
 
           {/* Results Section */}
-          {analysis && (
+          {analysis && !isAnalyzing && (
             <section className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold mb-4 text-foreground">Analysis Results</h2>
+                <h2 className="text-lg font-semibold mb-4 text-foreground">
+                  Analysis Results - {analysis.index}
+                </h2>
                 <DashboardSummary analysis={analysis} />
               </div>
+
+              <InsightsPanel analysis={analysis} />
 
               <SupportResistanceTable
                 supportZones={analysis.support_zones}
