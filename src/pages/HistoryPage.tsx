@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { History, Trash2, ArrowLeft, Filter } from 'lucide-react';
+import { History, Trash2, ArrowLeft, Filter, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,14 +31,39 @@ import { toast } from 'sonner';
 
 export default function HistoryPage() {
   const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
   const [analyses, setAnalyses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterIndex, setFilterIndex] = useState<string>('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadHistory();
-  }, [filterIndex]);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate('/auth');
+      }
+    });
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (user) {
+      loadHistory();
+    }
+  }, [filterIndex, user]);
 
   const loadHistory = async () => {
     setIsLoading(true);
@@ -66,6 +93,12 @@ export default function HistoryPage() {
       toast.error('Failed to delete analysis');
       console.error('Error deleting analysis:', error);
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success('Logged out successfully');
+    navigate('/auth');
   };
 
   const convertToAnalysis = (data: any): IndexAnalysis => ({
@@ -99,6 +132,13 @@ export default function HistoryPage() {
                 <p className="text-sm text-muted-foreground">View and export past analyses</p>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="font-medium">Logout</span>
+            </button>
           </div>
         </div>
       </header>
