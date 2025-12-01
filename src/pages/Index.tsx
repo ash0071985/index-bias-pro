@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { FileUploader } from '@/components/FileUploader';
 import { IndexSelector } from '@/components/IndexSelector';
 import { DashboardSummary } from '@/components/DashboardSummary';
@@ -13,16 +14,47 @@ import { ExportButtons } from '@/components/ExportButtons';
 import { BhavCopyRow, IndexName, IndexAnalysis } from '@/types/options';
 import { analyzeIndex } from '@/lib/optionsAnalysis';
 import { getDetectedIndices, getExpiryDate } from '@/lib/validation';
-import { BarChart3, History } from 'lucide-react';
+import { BarChart3, History, LogOut, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { User as SupabaseUser } from '@supabase/supabase-js';
 
 const Index = () => {
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [rawData, setRawData] = useState<BhavCopyRow[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<IndexName>('BANKNIFTY');
   const [spotClose, setSpotClose] = useState<number>(46218);
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [detectedIndices, setDetectedIndices] = useState<string[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate('/auth');
+      }
+    });
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success('Logged out successfully');
+    navigate('/auth');
+  };
 
   const handleDataLoaded = (data: BhavCopyRow[]) => {
     setRawData(data);
@@ -94,12 +126,27 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">NSE Options Chain Analysis Tool</p>
               </div>
             </div>
-            <Link to="/history">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-accent transition-colors">
-                <History className="w-4 h-4" />
-                <span className="font-medium">History</span>
+            <div className="flex items-center gap-3">
+              {user && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{user.email}</span>
+                </div>
+              )}
+              <Link to="/history">
+                <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-accent transition-colors">
+                  <History className="w-4 h-4" />
+                  <span className="font-medium">History</span>
+                </button>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="font-medium">Logout</span>
               </button>
-            </Link>
+            </div>
           </div>
         </div>
       </header>
