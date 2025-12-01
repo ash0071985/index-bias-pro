@@ -14,7 +14,137 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analysis_history: {
+        Row: {
+          analysis_date: string | null
+          atm_strike: number
+          bias: string
+          created_at: string | null
+          expiry_date: string
+          id: string
+          index_name: string
+          pcr: number
+          premium_table: Json
+          raw_data: Json | null
+          resistance_zones: Json
+          spot_close: number
+          strategy: string | null
+          support_zones: Json
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          analysis_date?: string | null
+          atm_strike: number
+          bias: string
+          created_at?: string | null
+          expiry_date: string
+          id?: string
+          index_name: string
+          pcr: number
+          premium_table?: Json
+          raw_data?: Json | null
+          resistance_zones?: Json
+          spot_close: number
+          strategy?: string | null
+          support_zones?: Json
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          analysis_date?: string | null
+          atm_strike?: number
+          bias?: string
+          created_at?: string | null
+          expiry_date?: string
+          id?: string
+          index_name?: string
+          pcr?: number
+          premium_table?: Json
+          raw_data?: Json | null
+          resistance_zones?: Json
+          spot_close?: number
+          strategy?: string | null
+          support_zones?: Json
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      saved_reports: {
+        Row: {
+          analysis_id: string | null
+          created_at: string | null
+          id: string
+          is_bookmarked: boolean | null
+          notes: string | null
+          report_name: string
+          report_type: string
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          analysis_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_bookmarked?: boolean | null
+          notes?: string | null
+          report_name: string
+          report_type: string
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          analysis_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_bookmarked?: boolean | null
+          notes?: string | null
+          report_name?: string
+          report_type?: string
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_reports_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_profiles: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          preferences: Json | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
