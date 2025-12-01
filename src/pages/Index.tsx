@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FileUploader } from '@/components/FileUploader';
 import { IndexSelector } from '@/components/IndexSelector';
 import { DashboardSummary } from '@/components/DashboardSummary';
@@ -7,10 +8,12 @@ import { PremiumTable } from '@/components/PremiumTable';
 import { InsightsPanel } from '@/components/InsightsPanel';
 import { DataSummaryCard } from '@/components/DataSummaryCard';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { SaveAnalysisButton } from '@/components/SaveAnalysisButton';
+import { ExportButtons } from '@/components/ExportButtons';
 import { BhavCopyRow, IndexName, IndexAnalysis } from '@/types/options';
 import { analyzeIndex } from '@/lib/optionsAnalysis';
 import { getDetectedIndices, getExpiryDate } from '@/lib/validation';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, History } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -81,14 +84,22 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <BarChart3 className="w-6 h-6 text-primary" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <BarChart3 className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">EOD Options Analyzer</h1>
+                <p className="text-sm text-muted-foreground">NSE Options Chain Analysis Tool</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">EOD Options Analyzer</h1>
-              <p className="text-sm text-muted-foreground">NSE Options Chain Analysis Tool</p>
-            </div>
+            <Link to="/history">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-accent transition-colors">
+                <History className="w-4 h-4" />
+                <span className="font-medium">History</span>
+              </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -145,12 +156,17 @@ const Index = () => {
           {/* Results Section */}
           {analysis && !isAnalyzing && (
             <section className="space-y-6">
-              <div>
-                <h2 className="text-lg font-semibold mb-4 text-foreground">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">
                   Analysis Results - {analysis.index}
                 </h2>
-                <DashboardSummary analysis={analysis} />
+                <div className="flex gap-2">
+                  <SaveAnalysisButton analysis={analysis} rawData={rawData} />
+                  <ExportButtons analysis={analysis} />
+                </div>
               </div>
+              
+              <DashboardSummary analysis={analysis} />
 
               <InsightsPanel analysis={analysis} />
 
