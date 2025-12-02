@@ -1,49 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { BarChart3, History, Edit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { FileUploader } from '@/components/FileUploader';
-import { IndexSelector } from '@/components/IndexSelector';
-import { DashboardSummary } from '@/components/DashboardSummary';
-import { SupportResistanceTable } from '@/components/SupportResistanceTable';
-import { PremiumTable } from '@/components/PremiumTable';
-import { InsightsPanel } from '@/components/InsightsPanel';
-import { DataSummaryCard } from '@/components/DataSummaryCard';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { SaveAnalysisButton } from '@/components/SaveAnalysisButton';
-import { ExportButtons } from '@/components/ExportButtons';
-import { BhavCopyRow, IndexName, IndexAnalysis } from '@/types/options';
-import { analyzeIndex } from '@/lib/optionsAnalysis';
-import { getDetectedIndices, getExpiryDate } from '@/lib/validation';
-import { BarChart3, History, LogOut, User } from 'lucide-react';
-import { toast } from 'sonner';
-import { User as SupabaseUser } from '@supabase/supabase-js';
 
 const Index = () => {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [rawData, setRawData] = useState<BhavCopyRow[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<IndexName>('BANKNIFTY');
-  const [spotClose, setSpotClose] = useState<number>(46218);
-  const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [detectedIndices, setDetectedIndices] = useState<string[]>([]);
   const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         navigate('/auth');
+      } else {
+        setUser(session.user);
+        setIsLoading(false);
       }
     });
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
         navigate('/auth');
+      } else {
+        setUser(session.user);
+        setIsLoading(false);
       }
     });
 
@@ -52,64 +35,12 @@ const Index = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    toast.success('Logged out successfully');
     navigate('/auth');
   };
 
-  const handleDataLoaded = (data: BhavCopyRow[]) => {
-    setRawData(data);
-    const indices = getDetectedIndices(data);
-    setDetectedIndices(indices);
-    
-    // Auto-select first detected index
-    if (indices.length > 0 && indices.includes(selectedIndex) === false) {
-      setSelectedIndex(indices[0] as IndexName);
-    }
-  };
-
-  const handleAnalyze = () => {
-    if (rawData.length === 0 || !spotClose) {
-      toast.error('Please upload data and enter spot price');
-      return;
-    }
-
-    if (!spotClose || spotClose <= 0) {
-      toast.error('Please enter a valid spot close price');
-      return;
-    }
-
-    setIsAnalyzing(true);
-
-    // Simulate processing delay for better UX
-    setTimeout(() => {
-      try {
-        // Filter data for selected index
-        const indexData = rawData.filter(row => 
-          row.SYMBOL === selectedIndex && 
-          row.INSTRUMENT === 'OPTIDX' &&
-          (row.OPTION_TYP === 'CE' || row.OPTION_TYP === 'PE')
-        );
-
-        if (indexData.length === 0) {
-          toast.error(`No option chain data found for ${selectedIndex}`);
-          setIsAnalyzing(false);
-          return;
-        }
-
-        // Get expiry from data
-        const expiry = getExpiryDate(rawData, selectedIndex);
-
-        const result = analyzeIndex(selectedIndex, indexData, spotClose, expiry);
-        setAnalysis(result);
-        toast.success('Analysis completed successfully');
-      } catch (error) {
-        toast.error('Error analyzing data');
-        console.error(error);
-      } finally {
-        setIsAnalyzing(false);
-      }
-    }, 800);
-  };
+  if (isLoading) {
+    return <LoadingSpinner message="Loading..." />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -126,115 +57,98 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">NSE Options Chain Analysis Tool</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              {user && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card">
-                  <User className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{user.email}</span>
-                </div>
-              )}
-              <Link to="/history">
-                <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-accent transition-colors">
-                  <History className="w-4 h-4" />
-                  <span className="font-medium">History</span>
-                </button>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">{user?.email}</span>
+              <Link
+                to="/history"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="font-medium">Logout</span>
-              </button>
+                <History className="w-4 h-4" />
+                <span className="font-medium">History</span>
+              </Link>
+              <Button onClick={handleLogout} variant="outline" size="sm">
+                Logout
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="space-y-6">
-          {/* Upload Section */}
-          <section>
-            <h2 className="text-lg font-semibold mb-4 text-foreground">Step 1: Upload Bhavcopy</h2>
-            <FileUploader onDataLoaded={handleDataLoaded} />
-          </section>
+      <main className="container mx-auto px-4 py-16">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="text-center space-y-4">
+            <h2 className="text-4xl font-bold text-foreground">Welcome to Options Analyzer</h2>
+            <p className="text-lg text-muted-foreground">
+              Analyze NSE Options Chain data and get trading insights
+            </p>
+          </div>
 
-          {/* Configuration Section */}
-          {rawData.length > 0 && (
-            <>
-              <section>
-                <h2 className="text-lg font-semibold mb-4 text-foreground">Step 2: Data Overview</h2>
-                <DataSummaryCard
-                  totalRows={rawData.length}
-                  detectedIndices={detectedIndices}
-                  expiry={getExpiryDate(rawData, selectedIndex)}
-                />
-              </section>
-
-              <section>
-                <h2 className="text-lg font-semibold mb-4 text-foreground">Step 3: Configure Analysis</h2>
-                <IndexSelector
-                  selectedIndex={selectedIndex}
-                  onIndexChange={setSelectedIndex}
-                  spotClose={spotClose}
-                  onSpotCloseChange={setSpotClose}
-                />
-                <div className="mt-4">
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={isAnalyzing}
-                    className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isAnalyzing ? 'Analyzing...' : 'Analyze Options Data'}
-                  </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Manual Entry Card */}
+            <Card className="p-8 hover:shadow-lg transition-shadow">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="p-4 rounded-full bg-primary/10">
+                  <Edit className="w-12 h-12 text-primary" />
                 </div>
-              </section>
-            </>
-          )}
-
-          {/* Loading State */}
-          {isAnalyzing && (
-            <section>
-              <LoadingSpinner message="Analyzing option chain data..." />
-            </section>
-          )}
-
-          {/* Results Section */}
-          {analysis && !isAnalyzing && (
-            <section className="space-y-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-foreground">
-                  Analysis Results - {analysis.index}
-                </h2>
-                <div className="flex gap-2">
-                  <SaveAnalysisButton analysis={analysis} rawData={rawData} />
-                  <ExportButtons analysis={analysis} />
-                </div>
+                <h3 className="text-2xl font-semibold text-foreground">Manual Entry</h3>
+                <p className="text-muted-foreground">
+                  Enter option chain data manually for quick analysis
+                </p>
+                <Link to="/manual-entry" className="w-full">
+                  <Button className="w-full" size="lg">
+                    Start Manual Entry
+                  </Button>
+                </Link>
               </div>
-              
-              <DashboardSummary analysis={analysis} />
+            </Card>
 
-              <InsightsPanel analysis={analysis} />
+            {/* History Card */}
+            <Card className="p-8 hover:shadow-lg transition-shadow">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="p-4 rounded-full bg-secondary/10">
+                  <History className="w-12 h-12 text-secondary-foreground" />
+                </div>
+                <h3 className="text-2xl font-semibold text-foreground">Analysis History</h3>
+                <p className="text-muted-foreground">
+                  View and manage your saved analysis reports
+                </p>
+                <Link to="/history" className="w-full">
+                  <Button variant="secondary" className="w-full" size="lg">
+                    View History
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          </div>
 
-              <SupportResistanceTable
-                supportZones={analysis.support_zones}
-                resistanceZones={analysis.resistance_zones}
-              />
-
-              <PremiumTable
-                premiumLevels={analysis.premium_table}
-                atm={analysis.atm}
-              />
-            </section>
-          )}
-
-          {/* Empty State */}
-          {rawData.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">Upload a bhavcopy CSV file to get started</p>
+          {/* Features Section */}
+          <div className="mt-12 pt-12 border-t border-border">
+            <h3 className="text-2xl font-semibold text-foreground mb-6 text-center">Key Features</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="text-center space-y-2">
+                <div className="text-4xl">📊</div>
+                <h4 className="font-semibold text-foreground">Comprehensive Analysis</h4>
+                <p className="text-sm text-muted-foreground">
+                  ATM detection, PCR calculation, support/resistance zones
+                </p>
+              </div>
+              <div className="text-center space-y-2">
+                <div className="text-4xl">🎯</div>
+                <h4 className="font-semibold text-foreground">Strategy Suggestions</h4>
+                <p className="text-sm text-muted-foreground">
+                  Get automated trading strategy recommendations
+                </p>
+              </div>
+              <div className="text-center space-y-2">
+                <div className="text-4xl">💾</div>
+                <h4 className="font-semibold text-foreground">Save & Export</h4>
+                <p className="text-sm text-muted-foreground">
+                  Save analysis history and export reports as PDF/JSON
+                </p>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </main>
     </div>
