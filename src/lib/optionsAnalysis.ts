@@ -1,4 +1,5 @@
 import { BhavCopyRow, IndexAnalysis, SupportResistanceZone, PremiumLevel, TrendBias } from '@/types/options';
+import { getStrikeInterval, computeOTMStrikes, computeSyntheticPivotData, predictGap, getDefaultLotSize } from './syntheticAnalysis';
 
 export function computeATM(spotClose: number, strikes: number[]): number {
   return strikes.reduce((prev, curr) => 
@@ -108,11 +109,19 @@ export function suggestStrategy(bias: TrendBias): string {
   }
 }
 
+export interface AnalyzeIndexOptions {
+  underlyingHigh?: number;
+  underlyingLow?: number;
+  underlyingClose?: number;
+  lotSize?: number;
+}
+
 export function analyzeIndex(
   indexName: string,
   data: BhavCopyRow[],
   spotClose: number,
-  expiry: string
+  expiry: string,
+  options: AnalyzeIndexOptions = {}
 ): IndexAnalysis {
   const strikes = [...new Set(data.map(row => row.STRIKE_PR))];
   const atm = computeATM(spotClose, strikes);
@@ -127,6 +136,13 @@ export function analyzeIndex(
   const bias = predictTrend(pcr, support_zones, resistance_zones, spotClose, atm);
   const strategy = suggestStrategy(bias);
   
+  // New: Synthetic pivot and gap prediction
+  const strikeInterval = getStrikeInterval(indexName);
+  const { otmPeStrike, otmCeStrike } = computeOTMStrikes(atm, strikeInterval);
+  const spData = computeSyntheticPivotData(data, atm, strikeInterval);
+  const gapPrediction = predictGap(pcr);
+  const lotSize = options.lotSize || getDefaultLotSize(indexName);
+  
   return {
     index: indexName,
     spot_close: spotClose,
@@ -138,5 +154,15 @@ export function analyzeIndex(
     resistance_zones,
     premium_table,
     strategy,
+    // Enhanced fields
+    underlying_high: options.underlyingHigh,
+    underlying_low: options.underlyingLow,
+    underlying_close: options.underlyingClose || spotClose,
+    synthetic_pivot: spData?.syntheticPivot,
+    otm_pe_strike: otmPeStrike,
+    otm_ce_strike: otmCeStrike,
+    lot_size: lotSize,
+    gap_prediction: gapPrediction.prediction,
+    gap_confidence: gapPrediction.confidence,
   };
 }

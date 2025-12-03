@@ -43,6 +43,16 @@ export interface IndexAnalysis {
   resistance_zones: SupportResistanceZone[];
   premium_table: PremiumLevel[];
   strategy?: string;
+  // New fields for enhanced analysis
+  underlying_high?: number;
+  underlying_low?: number;
+  underlying_close?: number;
+  synthetic_pivot?: number;
+  otm_pe_strike?: number;
+  otm_ce_strike?: number;
+  lot_size?: number;
+  gap_prediction?: 'Gap Up' | 'Gap Down' | 'Neutral';
+  gap_confidence?: 'Low' | 'Medium' | 'High';
 }
 
 export type IndexName = 'BANKNIFTY' | 'NIFTY' | 'SENSEX' | 'MIDCPNIFTY' | 'FINNIFTY';
