@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,15 +14,17 @@ import { InsightsPanel } from '@/components/InsightsPanel';
 import { SaveAnalysisButton } from '@/components/SaveAnalysisButton';
 import { ExportButtons } from '@/components/ExportButtons';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { SyntheticPivotCard } from '@/components/SyntheticPivotCard';
+import { PremiumRangeChart } from '@/components/PremiumRangeChart';
+import { GapPrediction } from '@/components/GapPrediction';
 import { IndexName, BhavCopyRow, IndexAnalysis } from '@/types/options';
 import { analyzeIndex } from '@/lib/optionsAnalysis';
+import { getDefaultLotSize, getStrikeInterval, computeOTMStrikes, computeSyntheticPivotData, predictGap } from '@/lib/syntheticAnalysis';
 import { format } from 'date-fns';
 import { CalendarIcon, Plus, Trash2, Zap, BarChart3, History } from 'lucide-react';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect } from 'react';
 
 interface ManualStrikeEntry {
   id: string;
@@ -44,10 +46,18 @@ const ManualEntryPage = () => {
   const [user, setUser] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<IndexName>('BANKNIFTY');
   const [spotClose, setSpotClose] = useState<string>('');
+  const [underlyingHigh, setUnderlyingHigh] = useState<string>('');
+  const [underlyingLow, setUnderlyingLow] = useState<string>('');
+  const [lotSize, setLotSize] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<Date>();
   const [entries, setEntries] = useState<ManualStrikeEntry[]>([]);
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Update lot size when index changes
+  useEffect(() => {
+    setLotSize(getDefaultLotSize(selectedIndex).toString());
+  }, [selectedIndex]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -211,7 +221,12 @@ const ManualEntryPage = () => {
         const rawData = convertToRawData();
         const expiry = format(expiryDate, 'dd-MMM-yyyy').toUpperCase();
         
-        const result = analyzeIndex(selectedIndex, rawData, spot, expiry);
+        const result = analyzeIndex(selectedIndex, rawData, spot, expiry, {
+          underlyingHigh: underlyingHigh ? parseFloat(underlyingHigh) : undefined,
+          underlyingLow: underlyingLow ? parseFloat(underlyingLow) : undefined,
+          underlyingClose: spot,
+          lotSize: lotSize ? parseInt(lotSize) : undefined,
+        });
         setAnalysis(result);
         toast.success('Analysis completed successfully');
       } catch (error) {
@@ -265,7 +280,7 @@ const ManualEntryPage = () => {
           {/* Configuration Section */}
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-4 text-foreground">Configuration</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {/* Index Selector */}
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">Index</label>
@@ -281,17 +296,6 @@ const ManualEntryPage = () => {
                     <SelectItem value="SENSEX">SENSEX</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Spot Close */}
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Spot Close Price</label>
-                <Input
-                  type="number"
-                  placeholder="e.g., 48500"
-                  value={spotClose}
-                  onChange={(e) => setSpotClose(e.target.value)}
-                />
               </div>
 
               {/* Expiry Date */}
@@ -320,6 +324,51 @@ const ManualEntryPage = () => {
                     />
                   </PopoverContent>
                 </Popover>
+              </div>
+
+              {/* Lot Size */}
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Lot Size</label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 15"
+                  value={lotSize}
+                  onChange={(e) => setLotSize(e.target.value)}
+                />
+              </div>
+
+              {/* Placeholder for alignment */}
+              <div className="hidden lg:block" />
+            </div>
+
+            {/* Underlying Price Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Underlying High</label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 48700"
+                  value={underlyingHigh}
+                  onChange={(e) => setUnderlyingHigh(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Underlying Low</label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 48200"
+                  value={underlyingLow}
+                  onChange={(e) => setUnderlyingLow(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Underlying Close (Spot)</label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 48500"
+                  value={spotClose}
+                  onChange={(e) => setSpotClose(e.target.value)}
+                />
               </div>
             </div>
 
@@ -492,6 +541,36 @@ const ManualEntryPage = () => {
               </div>
 
               <DashboardSummary analysis={analysis} />
+              
+              {/* Gap Prediction */}
+              <GapPrediction 
+                pcr={analysis.pcr} 
+                prediction={predictGap(analysis.pcr)} 
+              />
+              
+              {/* Synthetic Pivot Analysis */}
+              {(() => {
+                const rawData = convertToRawData();
+                const strikeInterval = getStrikeInterval(selectedIndex);
+                const { otmPeStrike, otmCeStrike } = computeOTMStrikes(analysis.atm, strikeInterval);
+                const spData = computeSyntheticPivotData(rawData, analysis.atm, strikeInterval);
+                
+                if (spData) {
+                  return (
+                    <>
+                      <SyntheticPivotCard 
+                        spData={spData} 
+                        atm={analysis.atm}
+                        otmPeStrike={otmPeStrike}
+                        otmCeStrike={otmCeStrike}
+                      />
+                      <PremiumRangeChart spData={spData} />
+                    </>
+                  );
+                }
+                return null;
+              })()}
+              
               <InsightsPanel analysis={analysis} />
               <SupportResistanceTable
                 supportZones={analysis.support_zones}
