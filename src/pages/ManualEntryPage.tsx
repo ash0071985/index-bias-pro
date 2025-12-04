@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,11 +17,14 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { SyntheticPivotCard } from '@/components/SyntheticPivotCard';
 import { PremiumRangeChart } from '@/components/PremiumRangeChart';
 import { GapPrediction } from '@/components/GapPrediction';
+import { ZerodhaConnect } from '@/components/ZerodhaConnect';
+import { LiveDataFetcher } from '@/components/LiveDataFetcher';
 import { IndexName, BhavCopyRow, IndexAnalysis } from '@/types/options';
 import { analyzeIndex } from '@/lib/optionsAnalysis';
 import { getDefaultLotSize, getStrikeInterval, computeOTMStrikes, computeSyntheticPivotData, predictGap } from '@/lib/syntheticAnalysis';
+import { exchangeRequestToken, OptionChainResponse } from '@/lib/zerodhaApi';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, Trash2, Zap, BarChart3, History } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, Zap, BarChart3, History, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,6 +46,7 @@ interface ManualStrikeEntry {
 
 const ManualEntryPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<IndexName>('BANKNIFTY');
   const [spotClose, setSpotClose] = useState<string>('');
@@ -53,6 +57,7 @@ const ManualEntryPage = () => {
   const [entries, setEntries] = useState<ManualStrikeEntry[]>([]);
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [zerodhaConnected, setZerodhaConnected] = useState(false);
 
   // Update lot size when index changes
   useEffect(() => {
@@ -78,6 +83,86 @@ const ManualEntryPage = () => {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  // Handle Zerodha OAuth callback
+  useEffect(() => {
+    const requestToken = searchParams.get('request_token');
+    const error = searchParams.get('error');
+    
+    if (error) {
+      toast.error('Zerodha authentication failed');
+      setSearchParams({});
+      return;
+    }
+    
+    if (requestToken && user) {
+      // Exchange request token for access token
+      exchangeRequestToken(requestToken, user.id).then(result => {
+        if (result.error) {
+          toast.error(result.error);
+        } else {
+          toast.success('Connected to Zerodha successfully!');
+          setZerodhaConnected(true);
+        }
+        setSearchParams({});
+      });
+    }
+  }, [searchParams, user, setSearchParams]);
+
+  // Handle live data from Zerodha
+  const handleLiveDataFetched = (response: OptionChainResponse) => {
+    // Set underlying prices
+    if (response.underlying) {
+      setUnderlyingHigh(response.underlying.high.toString());
+      setUnderlyingLow(response.underlying.low.toString());
+      setSpotClose(response.underlying.close.toString());
+    }
+
+    // Convert Zerodha data to manual entries
+    const strikeMap = new Map<number, ManualStrikeEntry>();
+    
+    response.data.forEach(row => {
+      let entry = strikeMap.get(row.STRIKE_PR);
+      if (!entry) {
+        entry = {
+          id: crypto.randomUUID(),
+          strike: row.STRIKE_PR,
+          ce_oi: 0,
+          ce_oi_chg: 0,
+          ce_close: 0,
+          ce_high: 0,
+          ce_low: 0,
+          pe_oi: 0,
+          pe_oi_chg: 0,
+          pe_close: 0,
+          pe_high: 0,
+          pe_low: 0,
+        };
+        strikeMap.set(row.STRIKE_PR, entry);
+      }
+      
+      if (row.OPTION_TYP === 'CE') {
+        entry.ce_oi = row.OPEN_INT;
+        entry.ce_oi_chg = row.CHG_IN_OI;
+        entry.ce_close = row.CLOSE;
+        entry.ce_high = row.HIGH;
+        entry.ce_low = row.LOW;
+      } else {
+        entry.pe_oi = row.OPEN_INT;
+        entry.pe_oi_chg = row.CHG_IN_OI;
+        entry.pe_close = row.CLOSE;
+        entry.pe_high = row.HIGH;
+        entry.pe_low = row.LOW;
+      }
+    });
+
+    // Sort by strike and set entries
+    const sortedEntries = Array.from(strikeMap.values())
+      .sort((a, b) => a.strike - b.strike);
+    
+    setEntries(sortedEntries);
+    toast.success(`Loaded ${sortedEntries.length} strikes from Zerodha`);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -277,6 +362,30 @@ const ManualEntryPage = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Zerodha Integration Section */}
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Wifi className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Live Data from Zerodha</h2>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ZerodhaConnect 
+                onStatusChange={setZerodhaConnected}
+                className="lg:col-span-1"
+              />
+              <LiveDataFetcher
+                index={selectedIndex}
+                expiry={expiryDate}
+                spotPrice={spotClose}
+                isConnected={zerodhaConnected}
+                onDataFetched={handleLiveDataFetched}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Connect your Zerodha account to fetch live option chain data. Requires Kite Connect subscription (₹2000/month).
+            </p>
+          </Card>
+
           {/* Configuration Section */}
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-4 text-foreground">Configuration</h2>
