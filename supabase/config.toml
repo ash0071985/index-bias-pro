@@ -1,1 +1,19 @@
 project_id = "skqkrdhozvtgypjmjscb"
+
+[functions.zerodha-login]
+verify_jwt = false
+
+[functions.zerodha-callback]
+verify_jwt = false
+
+[functions.zerodha-status]
+verify_jwt = true
+
+[functions.zerodha-instruments]
+verify_jwt = true
+
+[functions.zerodha-option-chain]
+verify_jwt = true
+
+[functions.zerodha-disconnect]
+verify_jwt = true
